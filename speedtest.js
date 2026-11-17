@@ -25,6 +25,8 @@ function getResponse(url, signal) {
   const get = url.protocol === 'https:' ? httpsGet : httpGet;
   return new Promise((resolve, reject) => {
     get(url, {
+      // Закрываем соединение после ответа, не оставляя его в общем keep-alive-пуле.
+      agent: false,
       signal,
       headers: { 'Accept-Encoding': 'identity' },
     }, resolve).once('error', reject);

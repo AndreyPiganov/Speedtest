@@ -9,8 +9,8 @@ import { measureDownload } from '../speedtest.js';
 
 const script = fileURLToPath(new URL('../speedtest.js', import.meta.url));
 
-async function startServer(t, handler) {
-  const server = createServer(handler);
+async function startServer(t, handler, options = {}) {
+  const server = createServer(options, handler);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => new Promise((resolve, reject) => {
@@ -79,6 +79,21 @@ test('counts compressed body bytes without decompressing', async (t) => {
   const result = await measureDownload(url);
   assert.equal(acceptEncoding, 'identity');
   assert.equal(result.bytes, body.length);
+});
+
+test('closes an image connection without waiting for the server keep-alive timeout', { timeout: 2000 }, async (t) => {
+  const image = Buffer.alloc(4096);
+  let resolveClosed;
+  const connectionClosed = new Promise((resolve) => { resolveClosed = resolve; });
+  const url = await startServer(t, (request, response) => {
+    request.socket.once('close', resolveClosed);
+    response.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': image.length });
+    response.end(image);
+  }, { keepAliveTimeout: 120_000 });
+
+  const { bytes } = await measureDownload(url);
+  assert.equal(bytes, image.length);
+  await connectionClosed;
 });
 
 test('follows relative redirects and counts only the final response body', async (t) => {
